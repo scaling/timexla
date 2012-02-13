@@ -1,0 +1,2 @@
+scalala_2.9.1-1.0.0.RC2-SNAPSHOT.min.jar
+
