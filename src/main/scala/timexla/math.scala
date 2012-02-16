@@ -1,6 +1,8 @@
-package henrian
+package ut.timexla
 
 import scala.math._
+
+// This little module was provided by Jason Baldridge, presumably under a WTFPL
 
 object QuickMath {
   def euclid(x: List[Double], y: List[Double]): Double = sqrt((for ((a,b) <- x.zip(y)) yield pow(a-b,2)) sum)

@@ -1,4 +1,4 @@
-package henrian
+package ut.timexla
 
 case class Span(dict: Map[String, Any]) {
   val text = dict.get("text") match {
