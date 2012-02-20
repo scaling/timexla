@@ -1,4 +1,7 @@
 target/
 .DS_Store
 lib/*.jar
-
+.cache
+.classpath
+.project
+.settings/

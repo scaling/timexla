@@ -1,30 +1,222 @@
-package ut.timexla.timeml
+package timexla
 
 import scala.xml._
+import scala.collection.mutable.{ListBuffer,Map => MutableMap}
 
+case class Timex(
+  range: (Int, Int),
+  id: String,
+  timex_type: String, // DATE or DURATION
+  value: String,
+  temporal_function: Boolean,
+  document_creation_time: Boolean
+)
+case class Event(
+  range: (Int, Int),
+  id: String,
+  class_name: String
+)
+case class Signal(
+  range: (Int, Int),
+  id: String
+)
 
-case class Span(dict: Map[String, Any]) {
-  val text = dict.get("text") match {
-    case Some(x: String) => x
-    case _ => ""
-  }
-  val begin = dict.get("begin") match {
-    case Some(x: Int) => x
-    case _ => -1
-  }
-  val end = dict.get("end") match {
-    case Some(x: Int) => x
-    case _ => -1
+object LinkType extends Enumeration {
+ type LinkType = Value
+ val T, S, A = Value
+}
+
+class Link(
+  val xml_id: String,
+  val rel_type: String,
+  val link_type: LinkType.Value,
+  val signal: Option[Signal]
+)
+
+case class EventInstance(
+  xml_id: String,
+  event: Event,
+  tense: String,
+  aspect: String,
+  polarity: String,
+  pos: String,
+  modality: String
+) {
+  val related_to = ListBuffer[Link]()
+}
+
+class TimeLink(
+  xml_id: String,
+  rel_type: String,
+  link_type: LinkType.Value,
+  signal: Option[Signal],
+  val timex: Timex 
+) extends Link(xml_id, rel_type, link_type, signal)
+
+class EventInstanceLink(
+  xml_id: String,
+  rel_type: String,
+  link_type: LinkType.Value,
+  signal: Option[Signal],
+  val event_instance: EventInstance
+) extends Link(xml_id, rel_type, link_type, signal)
+
+class SubordinatedEventInstanceLink(
+  xml_id: String,
+  rel_type: String,
+  link_type: LinkType.Value,
+  signal: Option[Signal],
+  val subordinated_event_instance: EventInstance
+) extends Link(xml_id, rel_type, link_type, signal)
+
+case class Document(text: String, filename: String) {
+  val tokens = ListBuffer[String]() // text.split(" ").toList
+  val xml_document = XML.loadString(text)
+  /* debug: 
+    // cd /Volumes/Zooey/Dropbox/ut/timex/corpora/timebank_1_2/data/timeml
+	import scala.xml._
+	val text = io.Source.fromFile("wsj_0670.tml").mkString
+	val xml_doc = XML.loadString(text)
+   */
+
+  val tokenizer = """(?:[#\$]?\d+(?:\.\d+)?%?|(?:[-\w]+(?:'[-\w])*)|\.{2,}|\.|;|,|:|'|"|\(|\))""".r
+  def addText(fragment: String): (Int, Int) = {
+    // returns the start and end indices of the added tokens. start <= end
+    val insert_at = tokens.length
+    val new_tokens = tokenizer.findAllIn(text).map(_.toString)
+    tokens ++= new_tokens
+    (insert_at, insert_at + new_tokens.length) // is this a off-by-1 error?
   }
 
-  val range = (begin, end)
+  val timexes = MutableMap[String, Timex]()
+  val events = MutableMap[String, Event]()
+  val signals = MutableMap[String, Signal]()
+  val event_instances = MutableMap[String, EventInstance]()
+
+  xml_document.child.foreach { child =>
+    child.label match {
+      case "#PCDATA" =>
+        addText(child.text)
+      case "TIMEX3" =>
+        val range = addText(child.text)
+        val timex = Timex(range,
+          (child \ "@tid").text,
+          (child \ "@type").text,
+          (child \ "@value").text,
+          (child \ "@temporalFunction").text.toBoolean,
+          (child \ "@functionInDocument").text == "CREATION_TIME")
+        timexes((child \ "@tid").text) = timex
+      case "EVENT" =>
+        val range = addText(child.text)
+        val id = (child \ "@eid").text
+        events(id) = Event(range, id, (child \ "@class").text)
+      case "SIGNAL" =>
+        val range = addText(child.text)
+        val id = (child \ "@sid").text
+        signals(id) = Signal(range, id)
+      case "MAKEINSTANCE" =>
+        val event = events((child \ "@eventID").text)
+        val id = (child \ "@eiid").text
+        event_instances(id) = EventInstance(id, event,
+          (child \ "@tense").text,
+          (child \ "@aspect").text,
+          (child \ "@polarity").text,
+          (child \ "@pos").text,
+          (child \ "@modality").text)
+      case "TLINK"|"SLINK"|"ALINK" =>
+        val lid = (child \ "@lid").text
+        val rel_type = (child \ "@relType").text
+        val signal_id = (child \ "@signalID").text
+        val link_type = child.label match {
+          case "TLINK" => LinkType.T
+          case "SLINK" => LinkType.S
+          case "ALINK" => LinkType.A
+        }
+        val related_to_time = (child \ "@relatedToTime")
+        val related_to_event_instance = (child \ "@relatedToEventInstance")
+        val subordinated_event_instance = (child \ "@subordinatedEventInstance")
+        
+        val signal = signals.get(signal_id)
+
+        val link = if (related_to_time.length > 0) {
+          new TimeLink(lid, rel_type, link_type, signal, timexes(related_to_time.text))
+        } else if (related_to_event_instance.length > 0) {
+          new EventInstanceLink(lid, rel_type, link_type, signal, event_instances(related_to_event_instance.text))
+        } else if (subordinated_event_instance.length > 0) {
+          new SubordinatedEventInstanceLink(lid, rel_type, link_type, signal, event_instances(subordinated_event_instance.text))
+        } else {
+          new Link(lid, rel_type, link_type, signal) // what would this mean?
+        }
+
+        val id = (child \ "@eventInstanceID").text
+        event_instances(id).related_to += link
+    }
+  }
+  
+  // coverage will end up being a set of indices
+  val event_indices = (Set[Int]() /: timexes.values) { (accumulator, next) =>
+    accumulator ++ (next.range._1 to next.range._2) 
+  }
+
+  // List[BIOTag] enumerations
+  val tags = (0 to tokens.length).map { i =>
+    if (event_indices.contains(i)) {
+      if (i > 0 && event_indices.contains(i - 1))
+        BIOTag.I
+      else
+        BIOTag.B
+    }
+    else
+      BIOTag.O
+  }.toList
 
   override def toString = {
-    text+" ["+begin+"-"+end+"]"
+//    val colored_tokens = 
+    tokens.zip(tags).map { case (token, tag) =>
+      val color = tag match {
+        case BIOTag.B => Console.GREEN
+        case BIOTag.I => Console.YELLOW
+        case BIOTag.O => Console.RED
+      }
+      color + token
+    }.mkString(" ") + Console.RESET
+//      println("%16s ".format(tokens(i)) + color + tags.mkString(" ") + )
+//    filename+"\n"+text+"\n"+created+spans.mkString("\n")+"\n"+zipped.mkString("\n")
   }
 }
 
-// object Document {
+
+
+// <TLINK lid="l115" relType="BEFORE" eventInstanceID="ei2309" relatedToTime="t161"/>
+// <TLINK lid="l114" relType="AFTER" eventInstanceID="ei2374" relatedToEventInstance="ei2293"/>
+// <TLINK lid="l22" relType="SIMULTANEOUS" eventInstanceID="ei2290" relatedToEventInstance="ei2292" signalID="s311"/>
+// <SLINK lid="l94" relType="EVIDENTIAL" eventInstanceID="ei2337" subordinatedEventInstance="ei2338"/>
+// <ALINK lid="l101" relType="CONTINUES" eventInstanceID="ei2263" relatedToEventInstance="ei2264"/>
+
+//@spans = spans.select{ |span| !span.text.empty? }
+
+// case class Span(dict: Map[String, Any]) {
+//   val text = dict.get("text") match {
+//     case Some(x: String) => x
+//     case _ => ""
+//   }
+//   val begin = dict.get("begin") match {
+//     case Some(x: Int) => x
+//     case _ => -1
+//   }
+//   val end = dict.get("end") match {
+//     case Some(x: Int) => x
+//     case _ => -1
+//   }
+
+//   val range = (begin, end)
+
+//   override def toString = {
+//     text+" ["+begin+"-"+end+"]"
+//   }
+// }
+
+// object Docume2nt {
   // def parse(text: String, filename: String) {
     // twitter.Json.parse(text) match {
       // case json_document: Map[String, Any] => {
@@ -114,100 +306,3 @@ case class Span(dict: Map[String, Any]) {
         // @tokens << Span.new(token, index..(index + token.length - 1))
         // index += token.length + 1
 
-case class Timex(
-  id: String,
-  type: String,
-  value: String,
-  temporalFunction: Bool,
-  documentCreationTime: Bool,
-  range: (Int, Int)
-)
-case class Event(
-  id: String,
-  classname: String
-)
-
-case class Document(text: String, filename: String) {
-  val tokens = ListBuffer[String]() // text.split(" ").toList
-  val xml_document = XML.loadString(text)
-
-  val tokenizer = """(?:[#\$]?\d+(?:\.\d+)?%?|(?:[-\w]+(?:'[-\w])*)|\.{2,}|\.|;|,|:|'|"|\(|\))""".r
-  def addText(fragment: String): (Int, Int) = {
-    // returns the start and end indices of the added tokens. start <= end
-    val insert_at = tokens.length
-    val new_tokens = tokenizer.findAllIn(text)
-    tokens += new_tokens
-    (insert_at, insert_at + new_tokens.length) // is this a off-by-1 error?
-  }
-
-    // val document = Document(filename)
-    
-    // (xml_document \\ "TLINK").foreach { tlink =>
-      // xml_document
-    // }
-    // val tokens = 
-  timexes = ListBuffer[Timex]()
-  events = ListBuffer[Event]()
-
-  xml_document.child.foreach { child =>
-    child.label.match {
-      case "#PCDATA" =>
-        addText(child.text)
-      case "TIMEX3" =>
-        val range = addText(child.text)
-        val timex = Timex((child \ "@tid").text,
-          (child \ "@type").text,
-          (child \ "@value").text,
-          (child \ "@temporalFunction").text.toBool,
-          (child \ "@functionInDocument").text == CREATION_TIME)
-      case "EVENT" =>
-        val timex = Timex3((child \ "@eid").text, (child \ "@class").text)
-      case "SIGNAL" =>
-        
-    // print(x+"\n-\n")
-  }
-
-}
-
-
-#rb
-xml_doc.root.find('TLINK').each do |tlink_node|
-  timeID = tlink_node.attributes['relatedToTime']
-  signalID = tlink_node.attributes['signalID']
-  if timeID && signalID
-    timeID_tlinks[timeID] = signalID_tlinks[signalID] =
-      TLink.new(timeID, signalID, tlink_node.attributes['relType'])
-  end
-end
-
-spans = xml_doc.root.children.map do |node|
-  span = if node.text?
-    # node_type == XML::Node::TEXT_NODE
-    Span.new(node.to_s)
-  elsif node.name == 'TIMEX3'
-    # XML::Node::ELEMENT_NODE
-    # <TIMEX3 tid="t82" type="DATE" value="1998-01-08"
-    #   temporalFunction="false" functionInDocument="CREATION_TIME">
-
-    timex = Timex.new(node.first.to_s, node.attributes['value'], node.attributes['type'])
-    timex.tlink = timeID_tlinks[node.attributes['tid']]
-
-    if node.attributes['functionInDocument'] == 'CREATION_TIME'
-      @created = timex.value #DateTime.strptime(node.attributes['value'], "%Y-%m-%d")
-    end
-
-    timex
-  elsif node.name == 
-    signalID = node.attributes['sid']
-    if signalID_tlinks[signalID]
-      signalID_tlinks[signalID].text = node.first.to_s
-    end
-    Span.new(node.first.to_s)
-  else
-    Span.new(node.first.to_s)
-  end
-  span.text = span.text.gsub(/\s+/, " ").strip
-  span
-end
-
-@spans = spans.select{ |span| !span.text.empty? }

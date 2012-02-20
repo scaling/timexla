@@ -1,4 +1,4 @@
-package ut.timexla
+package timexla
 
 import scala.collection.mutable.{ListBuffer,Map => MutableMap}
 
@@ -49,7 +49,7 @@ object Features {
   def in_gazetteer(token: String) = { gazetteer_regex.findFirstIn(token) != None }
 }
 
-case class Hmm(documents: List[Document], lambda: Double) {
+case class Hmm(documents: Seq[Document], lambda: Double) {
   /* For the most part, our feature lists are (discrete-token-property -> BIO.distribution) pairs.
      When the token property is continuous, we will do K-means clustering after the fact. Or not.  */ 
 
@@ -130,7 +130,7 @@ case class Hmm(documents: List[Document], lambda: Double) {
     }
   }
 
-  def tag(unaligned_tokens: List[String]) = {
+  def tag(unaligned_tokens: Seq[String]) = {
     val tokens = "###" +: unaligned_tokens :+ "###"
     // not really true, it's more like B: 0.5, I: 0, O: 0.5
     val alpha = Array.fill(tokens.length, BIOTag.values.size)(State.Empty)

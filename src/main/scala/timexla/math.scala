@@ -1,4 +1,4 @@
-package ut.timexla
+package timexla
 
 import scala.math._
 
