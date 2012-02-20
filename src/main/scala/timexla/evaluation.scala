@@ -39,7 +39,7 @@ object Evaluation {
   }
 
   // run /Volumes/Zooey/Dropbox/ut/timex/corpora/timebank_1_2/data/timeml
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     var directory = new File(args(0))
     println("Reading directory: "+directory)
     var file_list = directory.listFiles.take(1)

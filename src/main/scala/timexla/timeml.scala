@@ -10,7 +10,9 @@ case class Timex(
   value: String,
   temporal_function: Boolean,
   document_creation_time: Boolean
-)
+) {
+  val links = ListBuffer[Link]()
+}
 case class Event(
   range: (Int, Int),
   id: String,
@@ -27,10 +29,10 @@ object LinkType extends Enumeration {
 }
 
 class Link(
-  val xml_id: String,
-  val rel_type: String,
-  val link_type: LinkType.Value,
-  val signal: Option[Signal]
+  xml_id: String,
+  rel_type: String,
+  link_type: LinkType.Value,
+  signal: Option[Signal]
 )
 
 case class EventInstance(
@@ -42,7 +44,7 @@ case class EventInstance(
   pos: String,
   modality: String
 ) {
-  val related_to = ListBuffer[Link]()
+  val links = ListBuffer[Link]()
 }
 
 class TimeLink(
@@ -50,7 +52,7 @@ class TimeLink(
   rel_type: String,
   link_type: LinkType.Value,
   signal: Option[Signal],
-  val timex: Timex 
+  timex: Timex 
 ) extends Link(xml_id, rel_type, link_type, signal)
 
 class EventInstanceLink(
@@ -58,7 +60,7 @@ class EventInstanceLink(
   rel_type: String,
   link_type: LinkType.Value,
   signal: Option[Signal],
-  val event_instance: EventInstance
+  event_instance: EventInstance
 ) extends Link(xml_id, rel_type, link_type, signal)
 
 class SubordinatedEventInstanceLink(
@@ -66,25 +68,40 @@ class SubordinatedEventInstanceLink(
   rel_type: String,
   link_type: LinkType.Value,
   signal: Option[Signal],
-  val subordinated_event_instance: EventInstance
+  subordinated_event_instance: EventInstance
 ) extends Link(xml_id, rel_type, link_type, signal)
 
 case class Document(text: String, filename: String) {
   val tokens = ListBuffer[String]() // text.split(" ").toList
   val xml_document = XML.loadString(text)
+  println("----------------------------------- \"\"\"")
+  println(text)
+  println("\"\"\" -----------------------------------")
   /* debug: 
     // cd /Volumes/Zooey/Dropbox/ut/timex/corpora/timebank_1_2/data/timeml
 	import scala.xml._
 	val text = io.Source.fromFile("wsj_0670.tml").mkString
 	val xml_doc = XML.loadString(text)
    */
-
-  val tokenizer = """(?:[#\$]?\d+(?:\.\d+)?%?|(?:[-\w]+(?:'[-\w])*)|\.{2,}|\.|;|,|:|'|"|\(|\))""".r
+  
+  def tokenize(str1: String): Seq[String] = {
+    // prefix all punctuation with a space: `his dolls. And' -> `his dolls . And'
+    // Also: prefix all contractions with a space
+	// xxx: need special handling for dollar/decimal amounts?    
+    val str2 = """'\w{1,3}|[;:,.!?]+ """.r.replaceAllIn(str1, " $0").trim
+    if (str2.isEmpty)
+      List[String]()
+    else
+      """\s+""".r.split(str2)
+  }
+  
+//  val tokenizer = """(?:[#\$]?\d+(?:\.\d+)?%?|(?:[-\w]+(?:'[-\w])*)|\.{2,}|\.|;|,|:|'|"|\(|\))""".r
   def addText(fragment: String): (Int, Int) = {
     // returns the start and end indices of the added tokens. start <= end
     val insert_at = tokens.length
-    val new_tokens = tokenizer.findAllIn(text).map(_.toString)
+    val new_tokens = tokenize(fragment)
     tokens ++= new_tokens
+    
     (insert_at, insert_at + new_tokens.length) // is this a off-by-1 error?
   }
 
@@ -94,6 +111,7 @@ case class Document(text: String, filename: String) {
   val event_instances = MutableMap[String, EventInstance]()
 
   xml_document.child.foreach { child =>
+    println(child)
     child.label match {
       case "#PCDATA" =>
         addText(child.text)
@@ -148,8 +166,19 @@ case class Document(text: String, filename: String) {
           new Link(lid, rel_type, link_type, signal) // what would this mean?
         }
 
-        val id = (child \ "@eventInstanceID").text
-        event_instances(id).related_to += link
+        val eiid = (child \ "@eventInstanceID").text
+        val tid = (child \ "@timeID").text
+        if (event_instances.contains(eiid)) {
+          event_instances(eiid).links += link
+        }
+        else if (timexes.contains(tid)) {
+          timexes(tid).links += link
+        }
+        else {
+          println(filename+": No receptacle for "+child)
+        }
+      case _ => 
+        println("Nothing doing -- not a valid match "+child)
     }
   }
   
@@ -180,6 +209,7 @@ case class Document(text: String, filename: String) {
       }
       color + token
     }.mkString(" ") + Console.RESET
+    //tokens.mkString(" / ")
 //      println("%16s ".format(tokens(i)) + color + tags.mkString(" ") + )
 //    filename+"\n"+text+"\n"+created+spans.mkString("\n")+"\n"+zipped.mkString("\n")
   }
