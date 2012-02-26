@@ -3,6 +3,15 @@ package timexla
 import scala.xml._
 import scala.collection.mutable.{ListBuffer,Map => MutableMap}
 
+/** 
+ * BIOTag.B, I, and O correspond to Beginning, Inside, and Outside NER-style tags
+ * The type of this object is BIOTag.Type, not BIOTag, which would be more elegant, but doesn't work
+ */
+object BIOTag extends Enumeration {
+ type BIOTag = Value
+ val B, I, O = Value
+}
+
 case class Timex(
   range: (Int, Int),
   id: String,
@@ -12,16 +21,27 @@ case class Timex(
   document_creation_time: Boolean
 ) {
   val links = ListBuffer[Link]()
+  override def toString = {
+    "timex_type="+timex_type+",value="+value+",temporal_function="+temporal_function+",created="+document_creation_time
+  }
 }
 case class Event(
   range: (Int, Int),
   id: String,
   class_name: String
-)
+) {
+  override def toString = {
+    "class_name="+class_name
+  }  
+}
 case class Signal(
   range: (Int, Int),
   id: String
-)
+) {
+  override def toString = {
+    ""
+  }  
+}
 
 object LinkType extends Enumeration {
  type LinkType = Value
@@ -74,9 +94,9 @@ class SubordinatedEventInstanceLink(
 case class Document(text: String, filename: String) {
   val tokens = ListBuffer[String]() // text.split(" ").toList
   val xml_document = XML.loadString(text)
-  println("----------------------------------- \"\"\"")
-  println(text)
-  println("\"\"\" -----------------------------------")
+//  println("----------------------------------- \"\"\"")
+//  println(text)
+//  println("\"\"\" -----------------------------------")
   /* debug: 
     // cd /Volumes/Zooey/Dropbox/ut/timex/corpora/timebank_1_2/data/timeml
 	import scala.xml._
@@ -87,7 +107,7 @@ case class Document(text: String, filename: String) {
   def tokenize(str1: String): Seq[String] = {
     // prefix all punctuation with a space: `his dolls. And' -> `his dolls . And'
     // Also: prefix all contractions with a space
-	// xxx: need special handling for dollar/decimal amounts?    
+  	// xxx: need special handling for dollar/decimal amounts?    
     val str2 = """'\w{1,3}|[;:,.!?]+ """.r.replaceAllIn(str1, " $0").trim
     if (str2.isEmpty)
       List[String]()
@@ -95,7 +115,7 @@ case class Document(text: String, filename: String) {
       """\s+""".r.split(str2)
   }
   
-//  val tokenizer = """(?:[#\$]?\d+(?:\.\d+)?%?|(?:[-\w]+(?:'[-\w])*)|\.{2,}|\.|;|,|:|'|"|\(|\))""".r
+  // val tokenizer = """(?:[#\$]?\d+(?:\.\d+)?%?|(?:[-\w]+(?:'[-\w])*)|\.{2,}|\.|;|,|:|'|"|\(|\))""".r
   def addText(fragment: String): (Int, Int) = {
     // returns the start and end indices of the added tokens. start <= end
     val insert_at = tokens.length
@@ -111,7 +131,6 @@ case class Document(text: String, filename: String) {
   val event_instances = MutableMap[String, EventInstance]()
 
   xml_document.child.foreach { child =>
-    println(child)
     child.label match {
       case "#PCDATA" =>
         addText(child.text)
@@ -200,18 +219,27 @@ case class Document(text: String, filename: String) {
   }.toList
 
   override def toString = {
-    tokens.zip(tags).map { case (token, tag) =>
+    filename + "\n" + tokens.zip(tags).map { case (token, tag) =>
       val color = tag match {
         case BIOTag.B => Console.GREEN
         case BIOTag.I => Console.YELLOW
         case BIOTag.O => Console.RED
+        case _ => ""
       }
       color + token
     }.mkString(" ") + Console.RESET
-//      println("%16s ".format(tokens(i)) + color + tags.mkString(" ") + )
-//    filename+"\n"+text+"\n"+created+spans.mkString("\n")+"\n"+zipped.mkString("\n")
+  }
+  def fullString: String = {
+    toString + "\n" +
+      timexes.map{ case (k, v) => "  Timex: " + tokens.slice(v.range._1, v.range._2).mkString(" ") + " -> " + v }.mkString("\n") + "\n" +
+      events.map{ case (k, v) => "  Event: " + tokens.slice(v.range._1, v.range._2).mkString(" ") + " -> " + v }.mkString("\n") + "\n" +
+      signals.map{ case (k, v) => "  Signal: " + tokens.slice(v.range._1, v.range._2).mkString(" ") + " -> " + v }.mkString("\n")
+//      event_instances.map{ case (k, v) => "  " + k + " -> " + v}.mkString("\n")
   }
 }
+
+//      println("%16s ".format(tokens(i)) + color + tags.mkString(" ") + )
+//    filename+"\n"+text+"\n"+created+spans.mkString("\n")+"\n"+zipped.mkString("\n")
 
 
   // List[BIOTag] enumerations

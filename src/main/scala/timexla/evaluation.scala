@@ -3,54 +3,29 @@ package timexla
 import java.io.File
 import scala.collection.mutable.{ListBuffer,Map => MutableMap}
 
-case class PR() {
-  var fp = 0
-  var tp = 0
-  var fn = 0
-  
-  def increment(fp_add: Int, tp_add: Int, fn_add: Int) {
-    fp += fp_add
-    tp += tp_add
-    fn += fn_add
-  }
-  
-  override def toString = {
-    val precision = tp.toDouble / (tp + fp)
-    val recall = tp.toDouble / (tp + fn)
-    val fscore = 2 * ((precision * recall) / (precision + recall))
-
-    """\hline\\
-  Precision: & %1.3f \\
-  Recall: & %1.3f \\
-  F-measure: & %1.3f \\\hline
-  """.format(precision, recall, fscore)
-  }
-  
-  def report {
-    println("False positives: " + fp)
-    println("True positives:  " + tp)
-    println("False negatives: " + fn)
-  }
-}
-
 object Evaluation {
-  def shuffle(source: Array[_ <: AnyRef]) {
-    java.util.Collections.shuffle(java.util.Arrays.asList(source:_*)) // shuffles in-place
-  }
-
   // run /Volumes/Zooey/Dropbox/ut/timex/corpora/timebank_1_2/data/timeml
   def main(args: Array[String]): Unit = {
     var directory = new File(args(0))
     println("Reading directory: "+directory)
-    var file_list = directory.listFiles.take(1)
+    var file_list = directory.listFiles //.take(50)
     var documents = file_list.map { file =>
+      // read string of text from file
       val timeml_text = io.Source.fromFile(file).mkString
+      // parse it and return resulting document
       Document(timeml_text, file.getName)
     }
-    println(documents(0))
+    //documents.foreach { doc => println(doc.fullString) }
+    val pr = evaluate(documents)
+    println(pr.shortString)
+    println(pr.toString)
   }
 
-  def evaluate(documents: List[Document]) {
+  def shuffle(source: Array[_ <: AnyRef]) {
+    java.util.Collections.shuffle(java.util.Arrays.asList(source:_*)) // shuffles in-place
+  }
+
+  def evaluate(documents: Seq[Document]): PrecisionRecall = {
     // documents.take(10).foreach(doc => tagAndPrintDoc(doc, hmm))
     
     // for (sentence <- test_doc.sentences) {
@@ -59,44 +34,46 @@ object Evaluation {
     // }
     
     
-    val pr = PR()
+    val documents_array = documents.toArray
+    shuffle(documents_array)
+
+    
+    val pr = PrecisionRecall()
 
     val training_count = (documents.length * 0.8d).toInt
-    for (i <- 0 to 10) {
-      val documents_array = documents.toArray
-      shuffle(documents_array)
-      val (training, test) = documents_array.splitAt(training_count)
-      val hmm = Hmm(training.toList, 0.1)
 
-      test.foreach { doc =>
-        val gold_set = doc.timexes.values.map(_.range).toSet 
-
-        val predicted_tags = hmm.tag(doc.tokens)
-        val predicted_spans = ListBuffer[(Int, Int)]()
-        var span_begin = -1 // -1 means we're not in a span
-        predicted_tags.zipWithIndex.foreach { case (tag, i) =>
-          if (tag == BIOTag.B) {
-            if (span_begin > -1)
-              predicted_spans += Tuple2(span_begin, i - 1)
-            span_begin = i
-          }
-          else if (tag == BIOTag.O && span_begin > -1) {
-            predicted_spans += Tuple2(span_begin, i - 1)
-            span_begin = -1
-          }
-        }
-        val predicted_set = predicted_spans.toSet
       
-        pr.increment(
-          (predicted_set -- gold_set).size, // fp
-           (predicted_set & gold_set).size, // tp
-          (gold_set -- predicted_set).size) // fn
+    val (training, test) = documents_array.splitAt(training_count)
+    println("Training on " + training.length + ", testing on " + test.length)
+    
+    val hmm = Hmm(training, 0.1)
+
+    test.foreach { doc =>
+      val gold_set = doc.timexes.values.map(_.range).toSet 
+
+      val predicted_tags = hmm.tag(doc.tokens)
+      val predicted_spans = ListBuffer[(Int, Int)]()
+      var span_begin = -1 // -1 means we're not in a span
+      predicted_tags.zipWithIndex.foreach { case (tag, i) =>
+        if (tag == BIOTag.B) {
+          if (span_begin > -1)
+            predicted_spans += Tuple2(span_begin, i - 1)
+          span_begin = i
+        }
+        else if (tag == BIOTag.O && span_begin > -1) {
+          predicted_spans += Tuple2(span_begin, i - 1)
+          span_begin = -1
+        }
       }
+      val predicted_set = predicted_spans.toSet
+    
+      pr.increment(
+        (predicted_set -- gold_set).size, // fp
+         (predicted_set & gold_set).size, // tp
+        (gold_set -- predicted_set).size) // fn
     }
     
-    pr.report
-    println()
-    println(pr.toString)
+    pr
   }
 
   def printWithOutput(tokens: Seq[String], tag_lists: List[(String, List[BIOTag.Value])]) {
@@ -131,3 +108,36 @@ object Evaluation {
     
     // evaluate(documents)
 }
+
+case class PrecisionRecall() {
+  var fp = 0
+  var tp = 0
+  var fn = 0
+  
+  def increment(fp_add: Int, tp_add: Int, fn_add: Int) {
+    fp += fp_add
+    tp += tp_add
+    fn += fn_add
+  }
+  
+  def precision = tp.toDouble / (tp + fp)
+  def recall = tp.toDouble / (tp + fn)
+  def fscore = 2 * ((precision * recall) / (precision + recall))
+  
+  override def toString = {
+    List("Precision: " + precision, "Recall:    " + recall, "F-score:   " + fscore).mkString("\n")
+  }
+  def latex = {
+    """\hline\\
+  Precision: & %1.3f \\
+  Recall: & %1.3f \\
+  F-measure: & %1.3f \\\hline
+  """.format(precision, recall, fscore)
+  }
+  
+  def shortString = {
+    List("False positives: " + fp, "True positives:  " + tp, "False negatives: " + fn).mkString("\n")
+  }
+}
+
+

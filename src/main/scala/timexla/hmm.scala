@@ -2,11 +2,10 @@ package timexla
 
 import scala.collection.mutable.{ListBuffer,Map => MutableMap}
 
-object BIOTag extends Enumeration {
- type BIOTag = Value
- val B, I, O = Value
-}
-
+/**
+ * BIOMap is simply a way of aggregating BIOTags in one object, counting incoming tags,
+ * and initializing each key to an arbitrary type.
+ */
 case class BIOMap[A]() {
   val internal = MutableMap[A, Array[Double]]()
   def +=(key: A, tag: BIOTag.Value) {
@@ -16,23 +15,30 @@ case class BIOMap[A]() {
   }
 }
 
-case class State(
-  logprob: Double,
-  tag: BIOTag.Value,
+/**
+ * State is a linked list for backtracking through a Viterbi sequence.
+ * 
+ * It inherits from Ordered so that you can compare two states based on their underlying probabilities
+ * toList recursively flattens a State (linked list) into a normal Scala List
+ */
+case class State(logprob: Double, tag: BIOTag.Value,
   previous: Option[State]) extends Ordered[State] {
   def compare(that: State) = this.logprob.compare(that.logprob)
-  def flatten: List[State] = {
+  def toList: List[State] = {
     previous match {
-      case Some(actual) => actual.flatten :+ this
+      case Some(actual) => actual.toList :+ this
       case _ => List(this)
     }
   }
 }
-
 object State {
   def Empty = State(Double.NegativeInfinity, BIOTag.B, None)
 }
 
+/**
+ * Features intends to be a collection of feature functions, weights for which are learned automatically.
+ * Soon, soon.
+ */
 object Features {
   val gazetteer = List(
     "minute", "hour", "day", "week", "month", "season", "quarter", "year",
@@ -160,7 +166,7 @@ case class Hmm(documents: Seq[Document], lambda: Double) {
       }
     }
 
-    val alpha_max_sequence = alpha(alpha.length - 2).max.flatten.drop(1)
+    val alpha_max_sequence = alpha(alpha.length - 2).max.toList.drop(1)
     alpha_max_sequence.map(_.tag)
   }
 }
