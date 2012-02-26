@@ -1,3 +1,4 @@
+// Copyright 2012 by Christopher Brown - MIT Licensed
 package timexla
 
 import java.io.File
@@ -8,7 +9,7 @@ object Evaluation {
   def main(args: Array[String]): Unit = {
     var directory = new File(args(0))
     println("Reading directory: "+directory)
-    var file_list = directory.listFiles //.take(50)
+    var file_list = directory.listFiles//.take(50)
     var documents = file_list.map { file =>
       // read string of text from file
       val timeml_text = io.Source.fromFile(file).mkString
@@ -28,10 +29,6 @@ object Evaluation {
   def evaluate(documents: Seq[Document]): PrecisionRecall = {
     // documents.take(10).foreach(doc => tagAndPrintDoc(doc, hmm))
     
-    // for (sentence <- test_doc.sentences) {
-    //   println("sentence: "+sentence)
-    //   printWithOutput(sentence, Array.fill(sentence.length)("-"), hmm.tag(sentence))
-    // }
     
     
     val documents_array = documents.toArray
@@ -73,32 +70,53 @@ object Evaluation {
         (gold_set -- predicted_set).size) // fn
     }
     
+    test.take(1).foreach { test_doc =>
+      println(test_doc.fullString)
+      printWithOutput(test_doc.tokens, List(
+        ("Gold", test_doc.tags),
+        ("HMM", hmm.tag(test_doc.tokens))
+      ))
+//      printWithOutput(doc.tokens, doc.tags sentence, Array.fill(sentence.length)("-"), hmm.tag(sentence))
+    }
+    
     pr
+
+  
+    // for (sentence <- test_doc.sentences) {
+    //   println("sentence: "+sentence)
+    //   printWithOutput(sentence, Array.fill(sentence.length)("-"), hmm.tag(sentence))
+    // }
   }
 
+  /**
+   * printWithOutput takes a list of plain tokens, and a list of (list-name, tag-list) tuples.
+   * 
+   * Usually, the list of tuples will have a "Gold" list and a "test" list
+   */
   def printWithOutput(tokens: Seq[String], tag_lists: List[(String, List[BIOTag.Value])]) {
     val template = "%16s ".format("Token") + tag_lists.map(_._1).mkString(" ")
+    val tags = tag_lists.map(_._2)
     (0 until tokens.length).foreach { i =>
-      val tags = tag_lists.map(_._2(i))
-      val identical = tags.zip(tags.tail).forall(ab => ab._1 == ab._2)
+      val token_tags = tags.map(_(i))
+      val identical = token_tags.zip(token_tags.tail).forall { case (a, b) => a == b }
       val color = if (identical) {
-        if (tags(0) == BIOTag.O)
+        if (token_tags(0) == BIOTag.O)
           Console.YELLOW
         else
           Console.GREEN
       } else {
         Console.RED
       }
-      println("%16s ".format(tokens(i)) + color + tags.mkString(" ") + Console.RESET)
+      println("%16s ".format(tokens(i)) + color + token_tags.mkString(" ") + Console.RESET)
     }
   }
 
-  def tagAndPrintDoc(test_doc: Document, hmm: Hmm) {
-    printWithOutput(test_doc.tokens, List(
-      ("Gold", test_doc.tags),
-      ("HMM", hmm.tag(test_doc.tokens))
-    ))
-  }
+//  def tagAndPrintDoc(test_doc: Document, hmm: Hmm) {
+//    printWithOutput(test_doc.tokens, List(
+//      ("Gold", test_doc.tags),
+//      ("HMM", hmm.tag(test_doc.tokens))
+//    ))
+//  }
 
     //val hmm = Hmm(documents, 0.1)
 //    tagAndPrintDoc(documents(0), hmm)

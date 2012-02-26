@@ -1,3 +1,4 @@
+// Copyright 2012 by Christopher Brown - MIT Licensed
 package timexla
 
 import scala.collection.mutable.{Map => MutableMap}

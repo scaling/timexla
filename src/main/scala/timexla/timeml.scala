@@ -1,3 +1,4 @@
+// Copyright 2012 by Christopher Brown - MIT Licensed
 package timexla
 
 import scala.xml._
@@ -122,7 +123,7 @@ case class Document(text: String, filename: String) {
     val new_tokens = tokenize(fragment)
     tokens ++= new_tokens
     
-    (insert_at, insert_at + new_tokens.length) // is this a off-by-1 error?
+    (insert_at, insert_at + new_tokens.length - 1)
   }
 
   val timexes = MutableMap[String, Timex]()
