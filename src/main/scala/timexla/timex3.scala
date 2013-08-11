@@ -55,7 +55,7 @@ class Timex3 {
     }
   }
   
-  override def toString: String = {
+  override def toString = {
     special match {
       case Some(special_value) => special_value.toString
       case _ => (if (duration) "P" else "") + store.map { case (k, v) => k + "=" + v }.mkString(",") 
@@ -80,7 +80,7 @@ object Timex3 {
       |
       ((?P<quarter>[X\d]+)Q)
       )$
-      """.r
+    """.r
   
   val special_re = "^(PAST_REF|PRESENT_REF|FUTURE_REF)$".r
   

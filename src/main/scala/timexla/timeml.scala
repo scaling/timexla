@@ -22,8 +22,9 @@ case class Timex(
   document_creation_time: Boolean
 ) {
   val links = ListBuffer[Link]()
+  val timex3 = value // Timex3.parse(value)
   override def toString = {
-    "timex_type="+timex_type+",value="+value+",temporal_function="+temporal_function+",created="+document_creation_time
+    "timex_type="+timex_type+",value="+value+",temporal_function="+temporal_function+",created="+document_creation_time+",timex3="+timex3
   }
 }
 case class Event(
@@ -232,9 +233,9 @@ case class Document(text: String, filename: String) {
   }
   def fullString: String = {
     toString + "\n" +
-      timexes.map{ case (k, v) => "  Timex: " + tokens.slice(v.range._1, v.range._2).mkString(" ") + " -> " + v }.mkString("\n") + "\n" +
-      events.map{ case (k, v) => "  Event: " + tokens.slice(v.range._1, v.range._2).mkString(" ") + " -> " + v }.mkString("\n") + "\n" +
-      signals.map{ case (k, v) => "  Signal: " + tokens.slice(v.range._1, v.range._2).mkString(" ") + " -> " + v }.mkString("\n")
+      timexes.map{ case (k, v) => "  Timex: " + tokens.slice(v.range._1, v.range._2 + 1).mkString(" ") + " -> " + v }.mkString("\n") + "\n" +
+      events.map{ case (k, v) => "  Event: " + tokens.slice(v.range._1, v.range._2 + 1).mkString(" ") + " -> " + v }.mkString("\n") + "\n" +
+      signals.map{ case (k, v) => "  Signal: " + tokens.slice(v.range._1, v.range._2 + 1).mkString(" ") }.mkString("\n")
 //      event_instances.map{ case (k, v) => "  " + k + " -> " + v}.mkString("\n")
   }
 }

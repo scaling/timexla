@@ -27,19 +27,13 @@ object Evaluation {
   }
 
   def evaluate(documents: Seq[Document]): PrecisionRecall = {
-    // documents.take(10).foreach(doc => tagAndPrintDoc(doc, hmm))
-    
-    
-    
     val documents_array = documents.toArray
     shuffle(documents_array)
-
     
     val pr = PrecisionRecall()
 
     val training_count = (documents.length * 0.8d).toInt
 
-      
     val (training, test) = documents_array.splitAt(training_count)
     println("Training on " + training.length + ", testing on " + test.length)
     
@@ -110,21 +104,6 @@ object Evaluation {
       println("%16s ".format(tokens(i)) + color + token_tags.mkString(" ") + Console.RESET)
     }
   }
-
-//  def tagAndPrintDoc(test_doc: Document, hmm: Hmm) {
-//    printWithOutput(test_doc.tokens, List(
-//      ("Gold", test_doc.tags),
-//      ("HMM", hmm.tag(test_doc.tokens))
-//    ))
-//  }
-
-    //val hmm = Hmm(documents, 0.1)
-//    tagAndPrintDoc(documents(0), hmm)
-
-    // println("Actual test_doc.length: "+test_doc.tokens.length)
-    // println("test_doc.sentences: "+test_doc.sentences.length)
-    
-    // evaluate(documents)
 }
 
 case class PrecisionRecall() {
